@@ -1,17 +1,17 @@
-(defproject saml20-clj "0.1.6-tizra-SNAPSHOT"
+(defproject saml20-clj "0.1.6-tizra-1"
   :description "Basic SAML 2.0 library for SSO."
   :url "https://github.com/vlacs/saml20-clj"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :source-paths ["src"]
-  :dependencies [[org.clojure/clojure "1.7.0"]
-                 [clj-time "0.11.0"]
-                 [ring "1.4.0"]
+  :dependencies [[org.clojure/clojure "1.10.0"]
+                 [clj-time "0.15.2"]
+                 [ring "1.6.3"]
                  [org.apache.santuario/xmlsec "2.0.4"]
                  [org.opensaml/opensaml "2.6.4"]
-                 [org.clojure/data.xml "0.0.7"]
-                 [org.clojure/data.codec "0.1.0"]
-                 [org.clojure/data.zip "0.1.1"]
+                 [org.clojure/data.xml "0.2.0-alpha3"]
+                 [org.clojure/data.codec "0.1.1"]
+                 [org.clojure/data.zip "0.1.3"]
                  ]
   :pedantic :warn
   :profiles {:dev {:source-paths ["dev" "test"]

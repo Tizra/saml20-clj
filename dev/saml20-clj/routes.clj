@@ -18,7 +18,7 @@
 (defn create-hmac-relay-state [secret-key-spec relay-state]
   (str relay-state ":" (saml-shared/hmac-str secret-key-spec relay-state)))
 
-(defn valid-hmac-relay-state? [secret-key-spec hmac-relay-state]
+(defn valid-hmac-relay-state? [secret-key-spec ^String hmac-relay-state]
   (let [idx (.lastIndexOf hmac-relay-state ":")
         [relay-state hmac] (if (pos? idx)
                              [(subs hmac-relay-state 0 idx) (subs hmac-relay-state (inc idx))]
@@ -85,64 +85,64 @@
                    decryption of responses coming from IdP
   :keystore-password - The password for opening the keystore file
   :key-alias - The alias for the private key in the keystore
-  
+
   The created routes are the following:
 
   - GET /saml/meta : This returns a SAML metadata XML file that has the needed information
                      for registering this SP. For example, it has the public key for this SP.
 
   - GET /saml : it redirects to the IdP with the SAML request envcoded in the URI per the
-                HTTP-Redirect binding. This route accepts a 'continue' parameter that can 
+                HTTP-Redirect binding. This route accepts a 'continue' parameter that can
                 have the relative URI, where the browser should be redirected to after the
-                successful login in the IdP. 
+                successful login in the IdP.
 
   - POST /saml : this is the endpoint for accepting the responses from the IdP. It then redirects
                  the browser to the 'continue-url' that is found in the RelayState paramete, or the '/' root
                  of the app.
   "
- [{:keys [app-name base-uri idp-uri idp-cert keystore-file keystore-password key-alias]}]
-  (let [decrypter (saml-sp/make-saml-decrypter keystore-file keystore-password key-alias)
-        cert (saml-shared/get-certificate-b64  keystore-file keystore-password key-alias)
-        mutables (assoc (saml-sp/generate-mutables)
-                        :xml-signer (saml-sp/make-saml-signer keystore-file keystore-password key-alias))
-        
-        acs-uri (str base-uri "/saml")
-        saml-req-factory! (saml-sp/create-request-factory mutables
-                                                          idp-uri
-                                                          saml-format
-                                                          app-name
-                                                          acs-uri)
-        prune-fn! (partial saml-sp/prune-timed-out-ids!
-                           (:saml-id-timeouts mutables))
-        state {:mutables mutables
-               :saml-req-factory! saml-req-factory!
-               :timeout-pruner-fn! prune-fn!
-               :certificate-x509 cert}]
-    (cc/routes
-      (cc/GET "/saml/meta" [] {:status 200
-                               :headers {"Content-type" "text/xml"}
-                               :body (saml-sp/metadata app-name acs-uri cert) } )
-      (cc/GET "/saml" [:as req]
-              ;;; Update this to actually do something. :|
-              )
-      (cc/POST "/saml" {params :params session :session}
-               (let [xml-response (saml-shared/base64->inflate->str (:SAMLResponse params))
-                     relay-state (:RelayState params)
-                     [valid-relay-state? continue-url] (valid-hmac-relay-state? (:secret-key-spec mutables) relay-state)
-                     saml-resp (saml-sp/xml-string->saml-resp xml-response)
-                     valid-signature? (if idp-cert
-                                        (saml-sp/validate-saml-response-signature saml-resp idp-cert)
-                                        true)
-                     valid? (and valid-relay-state? valid-signature?)
-                     saml-info (when valid? (saml-sp/saml-resp->assertions saml-resp decrypter) )]
-              ;;(prn saml-info)
-              (if valid?
-                {:status  303 ;; See other
-                 :headers {"Location" continue-url}
-                 :session (assoc session :saml saml-info)
-                 :body ""}
-                {:status 500
-                 :body "The SAML response from IdP does not validate!"}))))))
+  [{:keys [app-name base-uri idp-uri idp-cert keystore-file keystore-password key-alias]}]
+   (let [decrypter (saml-shared/make-saml-decrypter keystore-file keystore-password key-alias)
+         cert (saml-shared/get-certificate-b64  keystore-file keystore-password key-alias)
+         mutables (assoc (saml-sp/generate-mutables)
+                         :xml-signer (saml-shared/make-saml-signer keystore-file keystore-password key-alias))
+
+         acs-uri (str base-uri "/saml")
+         saml-req-factory! (saml-sp/create-request-factory mutables
+                                                           idp-uri
+                                                           saml-format
+                                                           app-name
+                                                           acs-uri)
+         prune-fn! (partial saml-sp/prune-timed-out-ids!
+                            (:saml-id-timeouts mutables))
+         state {:mutables mutables
+                :saml-req-factory! saml-req-factory!
+                :timeout-pruner-fn! prune-fn!
+                :certificate-x509 cert}]
+     (cc/routes
+       (cc/GET "/saml/meta" [] {:status 200
+                                :headers {"Content-type" "text/xml"}
+                                :body (saml-sp/metadata app-name acs-uri cert) } )
+       (cc/GET "/saml" [:as req]
+               ;;; Update this to actually do something. :|
+               )
+       (cc/POST "/saml" {params :params session :session}
+                (let [xml-response (saml-shared/base64->inflate->str (:SAMLResponse params))
+                      relay-state (:RelayState params)
+                      [valid-relay-state? continue-url] (valid-hmac-relay-state? (:secret-key-spec mutables) relay-state)
+                      saml-resp (saml-sp/xml-string->saml-resp xml-response)
+                      valid-signature? (if idp-cert
+                                         (saml-sp/validate-saml-response-signature saml-resp idp-cert)
+                                         true)
+                      valid? (and valid-relay-state? valid-signature?)
+                      saml-info (when valid? (saml-sp/saml-resp->assertions saml-resp decrypter) )]
+               ;;(prn saml-info)
+               (if valid?
+                 {:status  303 ;; See other
+                  :headers {"Location" continue-url}
+                  :session (assoc session :saml saml-info)
+                  :body ""}
+                 {:status 500
+                  :body "The SAML response from IdP does not validate!"}))))))
 
 (defn saml-wrapper
   [handler
@@ -152,7 +152,7 @@
   (let [new-mutables (assoc
                        mutables
                        :xml-signer
-                       (saml-sp/make-saml-signer
+                       (saml-shared/make-saml-signer
                          keystore-file keystore-password key-alias))]
   (fn saml-wrapper-fn
     [request]
@@ -166,10 +166,10 @@
           request :saml20
           (assoc
             saml20-config
-            :decrypter 
-            (saml-sp/make-saml-decrypter
+            :decrypter
+            (saml-shared/make-saml-decrypter
               keystore-file keystore-password key-alias)
-            :cert 
+            :cert
             (saml-shared/get-certificate-b64
               keystore-file keystore-password key-alias)
             :mutables new-mutables

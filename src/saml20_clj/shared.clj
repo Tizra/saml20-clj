@@ -3,16 +3,32 @@
   (:require [clj-time.core :as ctime]
             [clj-time.format :as ctimeformat]
             [clojure.data.codec.base64 :as b64]
-            [ring.util.codec :refer [form-encode url-encode base64-encode]]
+            [ring.util.codec :refer [form-encode]]
             [hiccup.util :refer [escape-html]]
             [clojure.string :as str]
             [clojure.java.io :as io]
-            [clojure.zip]
-            [clojure.xml])
-  (:import [java.io ByteArrayInputStream]))
+            [saml20-clj.xml :as saml-xml]
+            clojure.zip
+            clojure.xml)
+  (:import [java.io ByteArrayInputStream]
+           [org.apache.xml.security Init]
+           [org.opensaml.saml2.encryption Decrypter]
+           [org.apache.xml.security Init]
+           [org.apache.xml.security.utils Constants ElementProxy]
+           [org.apache.xml.security.transforms Transforms]
+           [org.apache.xml.security.c14n Canonicalizer]
+           [javax.xml.crypto.dsig XMLSignature XMLSignatureFactory]
+           [java.security.cert X509Certificate]
+           [org.opensaml.xml.security.keyinfo StaticKeyInfoCredentialResolver]
+           [org.opensaml.xml.encryption InlineEncryptedKeyResolver]
+           [org.opensaml.xml.security.x509 BasicX509Credential]
+           [java.security KeyStore]
+           [java.security.cert CertificateFactory Certificate]
+           [java.util.zip InflaterInputStream Inflater DeflaterInputStream Deflater]
+           [java.nio.charset Charset]))
 
 (def instant-format (ctimeformat/formatters :date-time-no-ms))
-(def charset-format (java.nio.charset.Charset/forName "UTF-8"))
+(def ^java.nio.charset.Charset charset-format (java.nio.charset.Charset/forName "UTF-8"))
 
 (def status-code-success "urn:oasis:names:tc:SAML:2.0:status:Success")
 
@@ -36,14 +52,14 @@
 
 (defn jcert->public-key
   "Extracts a public key object from a java cert object."
-  [java-cert-obj]
-  (.getPublicKey java-cert-obj)) 
+  [^Certificate java-cert-obj]
+  (.getPublicKey java-cert-obj))
 
 (defn parse-xml-str
-  [xml-str]
-  (clojure.zip/xml-zip (clojure.xml/parse (java.io.ByteArrayInputStream. (.getBytes xml-str)))))
+  [^String xml-str]
+  (clojure.zip/xml-zip (clojure.xml/parse (ByteArrayInputStream. (.getBytes xml-str)))))
 
- 
+
 (defn clean-x509-filter
   "Turns a base64 string into a byte array to be decoded, which includes sanitization."
   [x509-string]
@@ -57,19 +73,19 @@
   "Takes in a raw X.509 certificate string, parses it, and creates a Java certificate."
   [x509-string]
   (let [x509-byte-array (clean-x509-filter x509-string)
-        fty (java.security.cert.CertificateFactory/getInstance "X.509")
-        bais (new java.io.ByteArrayInputStream (bytes (b64/decode x509-byte-array)))]
+        fty (CertificateFactory/getInstance "X.509")
+        bais (new ByteArrayInputStream (bytes (b64/decode x509-byte-array)))]
     (.generateCertificate fty bais)))
 
 (defn jcert->public-key
   "Extracts a public key object from a java cert object."
-  [java-cert-obj]
-  (.getPublicKey java-cert-obj)) 
+  [^Certificate java-cert-obj]
+  (.getPublicKey java-cert-obj))
 
 
-(defn str->inputstream
+(defn ^ByteArrayInputStream str->inputstream
   "Unravels a string into an input stream so we can work with Java constructs."
-  [unravel]
+  [^String unravel]
   (ByteArrayInputStream. (.getBytes unravel charset-format)))
 
 (defn make-issue-instant
@@ -77,16 +93,16 @@
   [ii-date]
   (ctimeformat/unparse instant-format ii-date))
 
-(defn str->bytes
-  [some-string]
+(defn ^bytes str->bytes
+  [^String some-string]
   (.getBytes some-string charset-format))
 
-(defn bytes->str
-  [some-bytes]
+(defn ^String bytes->str
+  [^bytes some-bytes]
   (String. some-bytes charset-format))
 
-(defn byte-deflate
-  [str-bytes]
+(defn ^bytes byte-deflate
+  [^bytes str-bytes]
   (let [out (java.io.ByteArrayOutputStream.)
         deflater (java.util.zip.DeflaterOutputStream.
                    out
@@ -96,13 +112,13 @@
     (.toByteArray out)))
 
 (defn byte-inflate
-  [comp-bytes]
-  (let [input (java.io.ByteArrayInputStream. comp-bytes)
+  [^bytes comp-bytes]
+  (let [input (ByteArrayInputStream. comp-bytes)
         inflater (java.util.zip.InflaterInputStream.
                    input (java.util.zip.Inflater. true) 1024)
         result (read-to-end inflater)]
     (.close inflater)
-    result)) 
+    result))
 
 (defn str->base64
   [base64able-string]
@@ -117,12 +133,12 @@
   (let [byte-str (str->bytes deflatable-str)]
     (bytes->str (b64/encode (byte-deflate byte-str)))))
 
-(defn base64->inflate->str
-  [string]
+(defn ^String base64->inflate->str
+  [^String string]
   (let [byte-str (str->bytes string)]
     (bytes->str (b64/decode byte-str))))
 
-(defn random-bytes 
+(defn random-bytes
   ([size]
    (let [ba (byte-array size)
          r (new java.util.Random)]
@@ -152,7 +168,7 @@
 (defn hmac-str [^javax.crypto.spec.SecretKeySpec key-spec ^String string]
   (let [mac (doto (javax.crypto.Mac/getInstance "HmacSHA1")
               (.init key-spec))
-        hs (.doFinal mac (.getBytes string "UTF-8"))]
+        hs (.doFinal mac (.getBytes string charset-format))]
     (bytes->hex hs)))
 
 (defn uri-query-str
@@ -171,7 +187,7 @@
       form-encode-b64
       form-encode))
 
-(defn time-since
+(defn- time-since
   [time-span]
   (ctime/minus (ctime/now) time-span))
 
@@ -182,17 +198,62 @@
     (fn [i]
       (ctime/after? (second i) (time-since timespan))))
 
-(defn load-key-store [keystore-filename keystore-password]
+(defn- ^KeyStore load-key-store
+  [^String keystore-filename ^String keystore-password]
   (when (and (not (nil? keystore-filename))
              (.exists (io/as-file keystore-filename)))
     (with-open [is (clojure.java.io/input-stream keystore-filename)]
-      (doto (java.security.KeyStore/getInstance "JKS")
+      (doto (KeyStore/getInstance "JKS")
         (.load is (.toCharArray keystore-password))))))
 
-(defn get-certificate-b64 [keystore-filename keystore-password cert-alias]
-  (when-let [ks (load-key-store keystore-filename keystore-password)]
-    (-> ks (.getCertificate cert-alias) (.getEncoded) b64/encode (String. "UTF-8"))))
+(defn get-certificate-b64 [keystore-filename keystore-password ^String cert-alias]
+  (String. ^bytes (some-> (load-key-store keystore-filename keystore-password) (.getCertificate cert-alias) (.getEncoded) b64/encode)
+           charset-format))
 
+(defn make-saml-signer
+  [keystore-filename ^String keystore-password ^String key-alias]
+  (when keystore-filename
+    (Init/init)
+    (ElementProxy/setDefaultPrefix Constants/SignatureSpecNS "")
+    (let [ks (load-key-store keystore-filename keystore-password)
+          private-key (.getKey ks key-alias (.toCharArray keystore-password))
+          ^X509Certificate cert (.getCertificate ks key-alias)
+          sig-algo (case (.getAlgorithm private-key)
+                     "DSA" org.apache.xml.security.signature.XMLSignature/ALGO_ID_SIGNATURE_DSA
+                     org.apache.xml.security.signature.XMLSignature/ALGO_ID_SIGNATURE_RSA)]
+      ;; https://svn.apache.org/repos/asf/santuario/xml-security-java/trunk/samples/org/apache/xml/security/samples/signature/CreateSignature.java
+      ;; http://stackoverflow.com/questions/2052251/is-there-an-easier-way-to-sign-an-xml-document-in-java
+      ;; Also useful: http://www.di-mgt.com.au/xmldsig2.html
+      (fn sign-xml-doc [xml-string]
+        (let [xmldoc (saml-xml/str->xmldoc xml-string)
+              transforms (doto (new Transforms xmldoc)
+                           (.addTransform Transforms/TRANSFORM_ENVELOPED_SIGNATURE)
+                           (.addTransform Transforms/TRANSFORM_C14N_EXCL_OMIT_COMMENTS))
+              sig (new org.apache.xml.security.signature.XMLSignature xmldoc nil sig-algo
+                       Canonicalizer/ALGO_ID_C14N_EXCL_OMIT_COMMENTS)
+              canonicalizer (Canonicalizer/getInstance Canonicalizer/ALGO_ID_C14N_EXCL_OMIT_COMMENTS)]
+          (.. xmldoc
+              (getDocumentElement)
+              (appendChild (.getElement sig)))
+          (doto ^org.apache.xml.security.signature.XMLSignature sig
+            (.addDocument "" transforms Constants/ALGO_ID_DIGEST_SHA1)
+            (.addKeyInfo cert)
+            (.addKeyInfo (.getPublicKey cert))
+            (.sign private-key))
+          (String. (.canonicalizeSubtree canonicalizer xmldoc) "UTF-8"))))))
+
+(defn ^Decrypter make-saml-decrypter
+  [keystore-filename ^String keystore-password ^String key-alias]
+  (when keystore-filename
+    (let [ks (load-key-store keystore-filename keystore-password)
+          private-key (.getKey ks key-alias (.toCharArray keystore-password))
+          decryption-cred (doto (new BasicX509Credential)
+                            (.setPrivateKey private-key))
+          decrypter (new Decrypter
+                         nil
+                         (new StaticKeyInfoCredentialResolver decryption-cred)
+                         (new InlineEncryptedKeyResolver))]
+      decrypter)))
 
 ;; https://www.purdue.edu/apps/account/docs/Shibboleth/Shibboleth_information.jsp
 ;;  Or
@@ -217,3 +278,4 @@
                "urn:oid:1.3.6.1.4.1.5923.1.6.1.1" "eduCourseOffering"}]
     (fn [attr-oid]
       (get names attr-oid attr-oid) )))
+
