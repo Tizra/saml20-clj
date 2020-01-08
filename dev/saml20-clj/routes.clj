@@ -70,13 +70,13 @@
 (defn saml-routes
   "The SP routes. They can be combined with application specific routes. Also it is assumed that
   they are wrapped with compojure.handler/site or wrap-params and wrap-session.
-  
+
   The single argument is a map containing the following fields:
-  
+
   :app-name - The application's name
   :base-uri - The Base URI for the application i.e. its remotely accessible hostname and
               (if needed) port, e.g. https://example.org:8443 This is used for building the
-              'AssertionConsumerService' URI for the HTTP-POST Binding, by prepending the 
+              'AssertionConsumerService' URI for the HTTP-POST Binding, by prepending the
               base-uri to the '/saml' string.
   :idp-uri  - The URI for the IdP to use. This should be the URI for the HTTP-Redirect SAML Binding
   :idp-cert - The IdP certificate that contains the public key used by IdP for signing responses.
@@ -102,7 +102,7 @@
   "
   [{:keys [app-name base-uri idp-uri idp-cert keystore-file keystore-password key-alias]}]
    (let [decrypter (saml-shared/make-saml-decrypter keystore-file keystore-password key-alias)
-         cert (saml-shared/get-certificate-b64  keystore-file keystore-password key-alias)
+         cert (saml-xml/get-certificate-b64  keystore-file keystore-password key-alias)
          mutables (assoc (saml-sp/generate-mutables)
                          :xml-signer (saml-shared/make-saml-signer keystore-file keystore-password key-alias))
 
@@ -170,7 +170,7 @@
             (saml-shared/make-saml-decrypter
               keystore-file keystore-password key-alias)
             :cert
-            (saml-shared/get-certificate-b64
+            (saml-xml/get-certificate-b64
               keystore-file keystore-password key-alias)
             :mutables new-mutables
             :acs-uri acs-uri

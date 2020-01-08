@@ -17,7 +17,8 @@
            [org.opensaml.xml XMLObject]
            [javax.xml.crypto.dsig.dom DOMValidateContext]
            [javax.xml.parsers DocumentBuilderFactory]
-           [org.w3c.dom Document NodeList])
+           [org.w3c.dom Document NodeList]
+           [org.opensaml.saml2.encryption Decrypter])
   (:gen-class))
 
 ;;; These next 3 fns are defaults for storing SAML state in memory.
