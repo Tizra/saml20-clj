@@ -84,7 +84,7 @@
   (when (and (not (nil? keystore-filename))
              (.exists (io/as-file keystore-filename)))
     (with-open [is (clojure.java.io/input-stream keystore-filename)]
-      (doto (KeyStore/getInstance "JKS")
+      (doto (KeyStore/getInstance "PKCS12")
         (.load is (.toCharArray keystore-password))))))
 
 (defn get-certificate-b64 [keystore-filename keystore-password ^String cert-alias]
