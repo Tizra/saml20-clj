@@ -20,7 +20,8 @@
            [org.w3c.dom Document Node NodeList]
            [org.apache.xml.security.c14n Canonicalizer]
            [org.opensaml.xml.security.x509 BasicX509Credential]
-           [org.opensaml.saml2.encryption Decrypter]))
+           [org.opensaml.saml2.encryption Decrypter])
+  (:use tizra.debug))
 
 (defn make-xml-string
   "Creates an XML string using hiccup."
@@ -96,11 +97,12 @@
 
 (defn make-saml-signer
   [keystore-filename ^String keystore-password ^String key-alias]
+  (dbg  [keystore-filename ^String keystore-password ^String key-alias])
   (when keystore-filename
     (Init/init)
     (ElementProxy/setDefaultPrefix Constants/SignatureSpecNS "")
     (let [ks (load-key-store keystore-filename keystore-password)
-          private-key (.getKey ks key-alias (.toCharArray keystore-password))
+          private-key (.getKey (dbg ks) key-alias (.toCharArray keystore-password))
           ^X509Certificate cert (.getCertificate ks key-alias)
           sig-algo (case (.getAlgorithm private-key)
                      "DSA" org.apache.xml.security.signature.XMLSignature/ALGO_ID_SIGNATURE_DSA
@@ -124,7 +126,7 @@
             (.addKeyInfo cert)
             (.addKeyInfo (.getPublicKey cert))
             (.sign private-key))
-          (String. (.canonicalizeSubtree canonicalizer xmldoc) "UTF-8"))))))
+          (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"  (String. (.canonicalizeSubtree canonicalizer xmldoc) "UTF-8")))))))
 
 (defn ^Decrypter make-saml-decrypter
   [keystore-filename ^String keystore-password ^String key-alias]
