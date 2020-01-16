@@ -227,7 +227,7 @@
         true
         (catch org.opensaml.xml.validation.ValidationException ex
           (println "Signature NOT valid")
-          (println (.getMessage ex))
+          (println ex)
           false)))
     true ;; if not signature is present
     ))
