@@ -133,6 +133,7 @@
            (shared/uri-query-str
              {:SAMLRequest saml-request :RelayState relay-state})))))
 
+;dead/debug code
 (defn pull-attrs
   [loc attrs]
   (zipmap attrs (map (partial zf/attr loc) attrs)))
@@ -199,9 +200,10 @@
                                         (.getAttributeValues a))})
                           attributes))
         conditions ^Conditions (.getConditions assertion)
-        audiences (mapcat #(let [audiences (.getAudiences ^AudienceRestriction %)]
-                             (map (fn [^Audience a] (.getAudienceURI a)) audiences))
-                          (.getAudienceRestrictions conditions))]
+        audiences (when conditions
+                    (mapcat #(let [audiences (.getAudiences ^AudienceRestriction %)]
+                              (map (fn [^Audience a] (.getAudienceURI a)) audiences))
+                           (.getAudienceRestrictions conditions)))]
     {:attrs attrs :audiences audiences
      :name-id
      {:value (.getValue name-id)
