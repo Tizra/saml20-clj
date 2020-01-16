@@ -51,7 +51,7 @@
   "Turns a base64 string into a byte array to be decoded, which includes sanitization."
   [x509-string]
   (-> x509-string
-      (str/replace #"[\n ]" "")
+      (str/replace #"[ \n\r]" "")
       ((partial map byte))
       byte-array
       bytes))
