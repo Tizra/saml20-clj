@@ -248,6 +248,7 @@
 (defn ^AbstractSAMLObject xml-string->saml-resp
   "Parses a SAML response (XML string) from IdP and returns the corresponding (Open)SAML Response object"
   [xml-string]
+  ;(dbg :parsed-raw (parse (shared/str->inputstream xml-string)))
   (let [xmldoc (.getDocumentElement (saml-xml/str->xmldoc xml-string))
         unmarshallerFactory (Configuration/getUnmarshallerFactory)
         unmarshaller  (.getUnmarshaller unmarshallerFactory xmldoc)
