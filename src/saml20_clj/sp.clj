@@ -263,5 +263,9 @@
                             (map #(.decrypt decrypter ^EncryptedAssertion %)
                                 (.getEncryptedAssertions saml-resp))))
         props (map parse-saml-assertion assertions)]
+    (when (not= (count assertions) 1)
+      (throw (Exception. "Multiple (or missing) SAML Assertions in authorization response not supported")))
     (assoc (parse-saml-resp-status saml-resp)
-           :assertions props )))
+           :assertion (first props)
+           ;:name-id (.decrypt decrypter (get-in assertions ["name-id" "value"]))
+           )))

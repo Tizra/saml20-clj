@@ -97,12 +97,12 @@
 
 (defn make-saml-signer
   [keystore-filename ^String keystore-password ^String key-alias]
-  (dbg  [keystore-filename ^String keystore-password ^String key-alias])
+  [keystore-filename ^String keystore-password ^String key-alias]
   (when keystore-filename
     (Init/init)
     (ElementProxy/setDefaultPrefix Constants/SignatureSpecNS "")
     (let [ks (load-key-store keystore-filename keystore-password)
-          private-key (.getKey (dbg ks) key-alias (.toCharArray keystore-password))
+          private-key (.getKey ks key-alias (.toCharArray keystore-password))
           ^X509Certificate cert (.getCertificate ks key-alias)
           sig-algo (case (.getAlgorithm private-key)
                      "DSA" org.apache.xml.security.signature.XMLSignature/ALGO_ID_SIGNATURE_DSA
