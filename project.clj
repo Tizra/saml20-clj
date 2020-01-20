@@ -1,4 +1,4 @@
-(defproject saml20-clj "0.1.6-tizra-4"
+(defproject saml20-clj "0.1.6-tizra-5"
   :description "Basic SAML 2.0 library for SSO."
   :url "https://github.com/Tizra/saml20-clj"
   :license {:name "Eclipse Public License"
