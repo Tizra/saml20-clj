@@ -17,9 +17,11 @@
            [org.opensaml.xml XMLObject]
            [javax.xml.crypto.dsig.dom DOMValidateContext]
            [javax.xml.parsers DocumentBuilderFactory]
-           [org.w3c.dom Document NodeList]
-           [org.opensaml.saml2.encryption Decrypter])
-  ;(:use tizra.debug)
+           [org.w3c.dom Document NodeList Element Attr Node]
+           [org.opensaml.saml2.encryption Decrypter]
+           org.opensaml.xml.schema.impl.XSAnyImpl
+           org.opensaml.xml.ElementExtensibleXMLObject)
+  (:use tizra.debug)
   )
 
 ;;; These next 3 fns are defaults for storing SAML state in memory.
@@ -81,7 +83,8 @@
         :IssueInstant time-issued
         :ProtocolBinding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
         :ProviderName saml-service-name
-        :IsPassive false
+        :IsPassive "True"
+        :ForceAuthn "False"
         :Destination idp-uri
         :AssertionConsumerServiceURL acs-url}
        [:saml:Issuer
@@ -183,6 +186,43 @@
         parsed-zipper (clojure.zip/xml-zip xml)]
     (response->map parsed-zipper)))
 
+(def dump-node) ;; forward declaration
+
+(defn- xml-content [^Element node]
+  (mapv dump-node (take-while some? (iterate #(.getNextSibling ^Node %) node))))
+
+(defn- xml-attribute
+  [^Attr a]
+  [(.getName a) (.getTextContent a)])
+
+(defn- xml-attributes
+  [^Element e]
+  (let [atts (some-> e (.getAttributes))]
+    (into {} (map  #(xml-attribute (some-> atts (.item %))) (range 0 (.getLength atts))))))
+
+(defn- dump-node
+  [^Element e]
+  (when e
+    (let [type (-> e (.getNodeType))]
+      (cond  (= type Node/ELEMENT_NODE)
+             {:tag (.getNodeName e)
+              :attrs (xml-attributes e)
+              :content  (xml-content (.getFirstChild e))}
+       (= type Node/TEXT_NODE)
+       (.getNodeValue e)
+       ;; No other content interests us
+       :else
+       nil))))
+
+(defn parse-attribute
+  [^Attribute a]
+  (let [a-name (shared/saml2-attr->name (.getName a))]
+    (if (= "tizraData" a-name)
+      {a-name (dump-node
+                   (first (mapv #(.getDOM ^XMLObject %) (.getAttributeValues a))))}
+      {a-name (map #(-> ^XMLObject % (.getDOM) (.getTextContent))
+                   (.getAttributeValues a))})))
+
 ;; http://kevnls.blogspot.gr/2009/07/processing-saml-in-java-using-opensaml.html
 ;; http://stackoverflow.com/questions/9422545/decrypting-encrypted-assertion-using-saml-2-0-in-java-using-opensaml
 (defn parse-saml-assertion
@@ -194,16 +234,14 @@
                                     ^SubjectConfirmation (first (.getSubjectConfirmations subject)))
         name-id (.getNameID subject)
         attributes (mapcat #(.getAttributes ^AttributeStatement %) statements)
-        attrs (apply merge
-                     (map (fn [^Attribute a] {(shared/saml2-attr->name (.getName a)) ;; Or (.getFriendlyName a) ??
-                                   (map #(-> ^XMLObject % (.getDOM) (.getTextContent))
-                                        (.getAttributeValues a))})
-                          attributes))
+
+        attrs (apply merge (map parse-attribute attributes))
         conditions ^Conditions (.getConditions assertion)
         audiences (when conditions
                     (mapcat #(let [audiences (.getAudiences ^AudienceRestriction %)]
                               (map (fn [^Audience a] (.getAudienceURI a)) audiences))
                            (.getAudienceRestrictions conditions)))]
+
     {:attrs attrs :audiences audiences
      :name-id
      {:value (.getValue name-id)
