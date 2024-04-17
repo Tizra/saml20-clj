@@ -83,8 +83,8 @@
         :IssueInstant time-issued
         :ProtocolBinding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
         :ProviderName saml-service-name
-        :IsPassive "True"
-        :ForceAuthn "False"
+        :IsPassive "true"
+        :ForceAuthn "false"
         :Destination idp-uri
         :AssertionConsumerServiceURL acs-url}
        [:saml:Issuer
