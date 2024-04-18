@@ -70,28 +70,28 @@
         [:md:NameIDFormat  "urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName"]
         [:md:AssertionConsumerService  {:Binding  "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST", :Location acs-uri, :index  "0", :isDefault  "true"}]]])))
 
-(defn create-request
+(defn- create-request
   "Return XML elements that represent a SAML 2.0 auth request."
-  [time-issued saml-format saml-service-name saml-id acs-url idp-uri]
-  (str
-    (hiccup.page/xml-declaration "UTF-8")
-    (hiccup/html
-      [:samlp:AuthnRequest
-       {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
-        :ID saml-id
-        :Version "2.0"
-        :IssueInstant time-issued
-        :ProtocolBinding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-        :ProviderName saml-service-name
-        :IsPassive "true"
-        :ForceAuthn "false"
-        :Destination idp-uri
-        :AssertionConsumerServiceURL acs-url}
-       [:saml:Issuer
-        {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
-        saml-service-name]
-       ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
-       ])))
+  ([time-issued saml-format saml-service-name saml-id acs-url idp-uri options]
+    (str
+      (hiccup.page/xml-declaration "UTF-8")
+      (hiccup/html
+        [:samlp:AuthnRequest
+         (merge {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
+                 :ID saml-id
+                 :Version "2.0"
+                 :IssueInstant time-issued
+                 :ProtocolBinding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+                 :ProviderName saml-service-name
+                 :Destination idp-uri
+                 :AssertionConsumerServiceURL acs-url} options)
+         [:saml:Issuer
+          {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
+          saml-service-name]
+         ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
+         ])))
+  ([time-issued saml-format saml-service-name saml-id acs-url idp-uri]
+    (create-request time-issued saml-format saml-service-name saml-id acs-url idp-uri nil)))
 
 (defn generate-mutables
   []
@@ -110,6 +110,11 @@
   ([next-saml-id-fn! bump-saml-id-timeout-fn! xml-signer idp-uri saml-format saml-service-name acs-url]
    ;;; Bootstrap opensaml when we create a request factory.
    ;;; TODO: Figure out if this can be called more than once.
+   (create-request-factory
+     next-saml-id-fn! bump-saml-id-timeout-fn! xml-signer idp-uri saml-format saml-service-name acs-url nil))
+  ([next-saml-id-fn! bump-saml-id-timeout-fn! xml-signer idp-uri saml-format saml-service-name acs-url options]
+   ;;; Bootstrap opensaml when we create a request factory.
+   ;;; TODO: Figure out if this can be called more than once.
    (org.opensaml.DefaultBootstrap/bootstrap)
    (fn request-factory []
      (let [current-time (ctime/now)
@@ -120,7 +125,8 @@
                                        saml-service-name
                                        new-saml-id
                                        acs-url
-                                       idp-uri)]
+                                       idp-uri
+                                       options)]
        (bump-saml-id-timeout-fn! new-saml-id current-time)
        (if xml-signer
          (xml-signer new-request)
