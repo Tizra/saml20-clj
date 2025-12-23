@@ -1,5 +1,5 @@
 (ns saml20-clj.sp
-  (:require [clojure.data.xml :as xml]
+  (:require clojure.pprint
             [clojure.xml :refer [parse]]
             [ring.util.response :refer [redirect]]
             [clj-time.core :as ctime]
@@ -20,9 +20,7 @@
            [org.w3c.dom Document NodeList Element Attr Node]
            [org.opensaml.saml2.encryption Decrypter]
            org.opensaml.xml.schema.impl.XSAnyImpl
-           org.opensaml.xml.ElementExtensibleXMLObject)
-  (:use tizra.debug)
-  )
+           org.opensaml.xml.ElementExtensibleXMLObject))
 
 ;;; These next 3 fns are defaults for storing SAML state in memory.
 (defn bump-saml-id-timeout!

@@ -5,6 +5,7 @@
             [saml20-clj.sp :as saml-sp]
             [saml20-clj.xml :as saml-xml]
             [saml20-clj.shared :as saml-shared]
+            helmsman
             [helmsman uri navigation])
   (:gen-class))
 
@@ -31,7 +32,7 @@
   (let [{:keys [app-name acs-uri cert]} (:saml20 req)]
     {:status 200
      :headers {"Content-type" "text/xml"}
-     :body (saml-sp/metadata app-name acs-uri cert)}))
+     :body (saml-sp/metadata app-name acs-uri cert "logout")}))
 
 (defn new-request-handler
   [req]
@@ -101,10 +102,10 @@
                  of the app.
   "
   [{:keys [app-name base-uri idp-uri idp-cert keystore-file keystore-password key-alias]}]
-   (let [decrypter (saml-shared/make-saml-decrypter keystore-file keystore-password key-alias)
+   (let [decrypter (saml-xml/make-saml-decrypter keystore-file keystore-password key-alias)
          cert (saml-xml/get-certificate-b64  keystore-file keystore-password key-alias)
          mutables (assoc (saml-sp/generate-mutables)
-                         :xml-signer (saml-shared/make-saml-signer keystore-file keystore-password key-alias))
+                         :xml-signer (saml-xml/make-saml-signer keystore-file keystore-password key-alias))
 
          acs-uri (str base-uri "/saml")
          saml-req-factory! (saml-sp/create-request-factory mutables
@@ -121,7 +122,7 @@
      (cc/routes
        (cc/GET "/saml/meta" [] {:status 200
                                 :headers {"Content-type" "text/xml"}
-                                :body (saml-sp/metadata app-name acs-uri cert) } )
+                                :body (saml-sp/metadata app-name acs-uri cert "logout") } )
        (cc/GET "/saml" [:as req]
                ;;; Update this to actually do something. :|
                )
@@ -152,7 +153,7 @@
   (let [new-mutables (assoc
                        mutables
                        :xml-signer
-                       (saml-shared/make-saml-signer
+                       (saml-xml/make-saml-signer
                          keystore-file keystore-password key-alias))]
   (fn saml-wrapper-fn
     [request]
@@ -167,7 +168,7 @@
           (assoc
             saml20-config
             :decrypter
-            (saml-shared/make-saml-decrypter
+            (saml-xml/make-saml-decrypter
               keystore-file keystore-password key-alias)
             :cert
             (saml-xml/get-certificate-b64

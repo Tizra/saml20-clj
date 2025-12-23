@@ -20,8 +20,7 @@
            [org.w3c.dom Document Node NodeList]
            [org.apache.xml.security.c14n Canonicalizer]
            [org.opensaml.xml.security.x509 BasicX509Credential]
-           [org.opensaml.saml2.encryption Decrypter])
-  (:use tizra.debug))
+           [org.opensaml.saml2.encryption Decrypter]))
 
 (defn make-xml-string
   "Creates an XML string using hiccup."
